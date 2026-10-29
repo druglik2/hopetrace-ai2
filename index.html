@@ -1,0 +1,1077 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Search, Shield, Heart, Camera, Users, AlertTriangle, Calendar, MapPin, 
+  ChevronRight, RefreshCw, Sparkles, FileText, Download, Share2, Info, 
+  CheckCircle2, Sliders, Layers, Clock, Scan, Phone, MessageSquare,
+  Bell, ExternalLink, HelpCircle, Check, ArrowRight, UserCheck, Eye,
+  Bookmark, ChevronDown, ListFilter, Navigation, Map, Radio, Award
+} from 'lucide-react';
+
+// Sample Cases
+const MOCK_CASES = [
+  {
+    id: 'HT-2012-0042',
+    name: '김하은',
+    gender: '여성',
+    missingAge: 4,
+    missingYear: 2012,
+    currentAge: 18,
+    missingLocation: '서울특별시 관악구 신림동',
+    description: '왼쪽 볼에 작은 점이 있으며, 웃을 때 양쪽 보조개가 생깁니다.',
+    contact: '182 (경찰청 실종아동신고센터) / 02-1234-5678',
+    status: '긴급추적',
+    views: 14205,
+    registerDate: '2026.03.12',
+    colorPalette: { hair: '#2a221b', skin: '#f5d6c6', eyes: '#1c130b' },
+    features: ['광대뼈 곡률 성장 연령 보정', '눈가 고유 비대칭점 유지', '하악골(턱선) 성장 수치 적용', '비강 비례 보정']
+  },
+  {
+    id: 'HT-2018-0109',
+    name: '박민준',
+    gender: '남성',
+    missingAge: 6,
+    missingYear: 2018,
+    currentAge: 14,
+    missingLocation: '부산광역시 해운대구 우동',
+    description: '오른쪽 눈썹 끝에 미세한 흉터가 있고 이마가 넓은 편입니다.',
+    contact: '182 (경찰청) / 051-987-6543',
+    status: '추적중',
+    views: 8930,
+    registerDate: '2026.04.01',
+    colorPalette: { hair: '#1a1817', skin: '#eed0bd', eyes: '#221915' },
+    features: ['하악골 성장 직각화 반영', '높은 미간 유지율', '안구 간격 비례 보존', '피부 톤 자연 연령 보정']
+  },
+  {
+    id: 'HT-2015-0077',
+    name: '이서아',
+    gender: '여성',
+    missingAge: 5,
+    missingYear: 2015,
+    currentAge: 16,
+    missingLocation: '인천광역시 연수구 송도동',
+    description: '반달 모양의 눈웃음과 또렷한 쌍꺼풀이 특징입니다.',
+    contact: '182 / 032-888-1122',
+    status: '추적중',
+    views: 11200,
+    registerDate: '2026.05.15',
+    colorPalette: { hair: '#221e1a', skin: '#fce3d7', eyes: '#2d1f13' },
+    features: ['StyleGAN2 Latent 벡터 매핑', '연령별 인구통계학적 골격 합성', '눈/코/입 고유 거리유지']
+  }
+];
+
+// Live Alerts Mock
+const MOCK_MATCH_ALERTS = [
+  {
+    id: 'CCTV-902',
+    caseName: '김하은 (18세 추정)',
+    similarity: 92.4,
+    timestamp: '14:32:05',
+    location: '지하철 2호선 강남역 11번 출구 CCTV #12',
+    status: '검증 대기',
+    urgent: true
+  },
+  {
+    id: 'CCTV-884',
+    caseName: '김하은 (18세 추정)',
+    similarity: 86.1,
+    timestamp: '09:15:22',
+    location: '경기도 성남시 분당구 서현역 버스정류장',
+    status: '확인중',
+    urgent: false
+  },
+  {
+    id: 'CCTV-751',
+    caseName: '박민준 (14세 추정)',
+    similarity: 94.8,
+    timestamp: '11:04:40',
+    location: '부산 해운대구 센텀시티몰 입구 CCTV #02',
+    status: '최우선 검증',
+    urgent: true
+  }
+];
+
+export default function App() {
+  const [activeGnb, setActiveGnb] = useState('timeline'); // timeline, cases, cctv, poster, guide
+  const [selectedCase, setSelectedCase] = useState(MOCK_CASES[0]);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Year Progression Slider State
+  const [selectedYear, setSelectedYear] = useState(2026);
+  const [showMesh, setShowMesh] = useState(true);
+  const [viewMode, setViewMode] = useState('side'); // 'side' or 'overlay'
+  const [overlayPos, setOverlayPos] = useState(50);
+
+  // Scanning State
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+
+  // Form State
+  const [formData, setFormData] = useState({
+    name: '',
+    gender: '여성',
+    missingAge: 5,
+    missingYear: 2015,
+    location: '',
+    description: '',
+    contact: ''
+  });
+  const [isRegisterModal, setIsRegisterModal] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Gemini AI Assistant State
+  const [geminiResult, setGeminiResult] = useState('');
+  const [geminiLoading, setGeminiLoading] = useState(false);
+
+  const getAgeForYear = (year) => {
+    return Math.max(selectedCase.missingAge, selectedCase.missingAge + (year - selectedCase.missingYear));
+  };
+
+  const handleRunAnalysis = (e) => {
+    e.preventDefault();
+    setIsAnalyzing(true);
+    setTimeout(() => {
+      setIsAnalyzing(false);
+      const newCase = {
+        id: `HT-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        name: formData.name || '신규등록 아동',
+        gender: formData.gender,
+        missingAge: parseInt(formData.missingAge),
+        missingYear: parseInt(formData.missingYear),
+        currentAge: parseInt(formData.missingAge) + (2026 - parseInt(formData.missingYear)),
+        missingLocation: formData.location || '지역 미지정',
+        description: formData.description || '특이사항 없음',
+        contact: formData.contact || '182',
+        status: '신규등록',
+        views: 1,
+        registerDate: '2026.10.28',
+        colorPalette: { hair: '#1a1817', skin: '#fce3d7', eyes: '#221915' },
+        features: ['AI 기반 골격 성장율 수치 자동적용', '안면 특징점 128개 좌표 추출', '유전자 보존 필터 가동']
+      };
+      setSelectedCase(newCase);
+      setIsRegisterModal(false);
+      setActiveGnb('timeline');
+    }, 1200);
+  };
+
+  const runCCTVScan = () => {
+    setIsScanning(true);
+    setScanProgress(0);
+    const timer = setInterval(() => {
+      setScanProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(timer);
+          setIsScanning(false);
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 180);
+  };
+
+  const handleGeminiReport = async () => {
+    setGeminiLoading(true);
+    setGeminiResult('');
+    try {
+      const apiKey = "";
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+      const systemPrompt = `당신은 네이버 지식iN / 경찰청 실종아동 전문 AI 에이전트입니다. 전달된 아동 데이터를 바탕으로 시민들의 적극적인 제보를 유도하는 정중하고 명확한 수사 지원 요약문을 작성하세요.`;
+      const userPrompt = `아래 실종 아동의 정보를 네이버 뉴스/블로그 기사 스타일로 정돈하여 시민 제보 유도문을 작성해주세요:
+- 성명: ${selectedCase.name} (${selectedCase.gender})
+- 실종 시점: ${selectedCase.missingYear}년 (당시 만 ${selectedCase.missingAge}세)
+- 현재 추정 나이: 만 ${selectedCase.currentAge}세 (2026년 기준)
+- 실종 장소: ${selectedCase.missingLocation}
+- 신체 특징: ${selectedCase.description}`;
+
+      const payload = {
+        contents: [{ parts: [{ text: userPrompt }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] }
+      };
+
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      setGeminiResult(data?.candidates?.[0]?.content?.parts?.[0]?.text || "보고서 생성 완료");
+    } catch (err) {
+      setGeminiResult("AI 요약 보고서를 불러오는 도중 오류가 발생했습니다.");
+    } finally {
+      setGeminiLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F5F6F8] text-[#1e1e1e] font-sans flex flex-col selection:bg-[#03C75A] selection:text-white">
+      
+      {/* 1. NAVER STYLE TOP UTILITY HEADER */}
+      <header className="bg-white border-b border-[#E4E8EB] sticky top-0 z-50">
+        <div className="max-w-[1100px] mx-auto px-4 h-9 flex items-center justify-between text-xs text-[#666666]">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1 font-bold text-[#03C75A]">
+              <span className="w-2 h-2 rounded-full bg-[#03C75A]" />
+              W
+            </span>
+            <span className="text-[#D3D5D7]">|</span>
+            <span className="font-semibold text-[#111111]">희망트레이스 AI 센터</span>
+            <span className="hidden sm:inline-block text-[11px] bg-[#E8F9EE] text-[#00A843] px-2 py-0.5 rounded border border-[#BCECC9] font-medium">
+              경찰청 182 연동 공식 서비스
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3 text-[11px]">
+            <span className="hover:underline cursor-pointer">W 메인</span>
+            <span>·</span>
+            <span className="hover:underline cursor-pointer">실종아동 전문기관</span>
+            <span>·</span>
+            <a href="tel:182" className="text-[#E53935] font-bold flex items-center gap-1 hover:underline">
+              <Phone className="w-3 h-3" /> 긴급신고 182
+            </a>
+          </div>
+        </div>
+
+        {/* MAIN BRAND & SEARCH BAR */}
+        <div className="border-t border-[#F1F3F5] bg-white">
+          <div className="max-w-[1100px] mx-auto px-4 py-5 flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            {/* Logo */}
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveGnb('timeline')}>
+              <div className="w-10 h-10 bg-[#03C75A] rounded-lg flex items-center justify-center font-black text-white text-2xl shadow-sm tracking-tighter">
+                W
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-extrabold text-2xl tracking-tight text-[#03C75A]">W</span>
+                  <span className="font-bold text-xl text-[#111111]">희망트레이스</span>
+                  <span className="bg-[#03C75A] text-white text-[10px] font-bold px-1.5 py-0.5 rounded">AI</span>
+                </div>
+                <p className="text-[11px] text-[#888888]">실종아동 연도별 안면 성장 복원 및 실시간 CCTV 매칭</p>
+              </div>
+            </div>
+
+            {/* NAVER SEARCH BAR BOX */}
+            <div className="w-full md:w-[480px]">
+              <div className="relative flex items-center border-2 border-[#03C75A] rounded-md bg-white shadow-sm focus-within:shadow-md transition-shadow">
+                <input 
+                  type="text"
+                  placeholder="실종 아동 이름, 사건번호, 실종 지역 검색 (예: 김하은, 관악구)"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full py-2.5 px-3.5 text-xs text-[#111111] focus:outline-none"
+                />
+                <button className="bg-[#03C75A] hover:bg-[#00B550] text-white p-2.5 flex items-center justify-center transition-colors">
+                  <Search className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Action Button */}
+            <button 
+              onClick={() => setIsRegisterModal(true)}
+              className="w-full md:w-auto bg-[#03C75A] hover:bg-[#02B350] text-white px-4 py-2.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0"
+            >
+              <Camera className="w-4 h-4" />
+              실종아동 AI 등록하기
+            </button>
+          </div>
+        </div>
+
+        {/* GNB (GLOBAL NAVIGATION BAR - NAVER STYLE TABS) */}
+        <div className="border-t border-b border-[#E4E8EB] bg-white">
+          <div className="max-w-[1100px] mx-auto px-4 flex items-center justify-between overflow-x-auto scrollbar-none">
+            <nav className="flex items-center text-xs font-bold tracking-tight">
+              {[
+                { id: 'timeline', label: '연도별 얼굴 추적' },
+                { id: 'cases', label: '실종아동 목록' },
+                { id: 'cctv', label: 'CCTV 매칭 스캔' },
+                { id: 'poster', label: '전단지 & 제보' },
+                { id: 'guide', label: 'AI 기술 안내' },
+              ].map((tab) => {
+                const isActive = activeGnb === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveGnb(tab.id)}
+                    className={`py-3 px-4 border-b-2 whitespace-nowrap transition-all ${
+                      isActive 
+                        ? 'border-[#03C75A] text-[#03C75A] font-extrabold' 
+                        : 'border-transparent text-[#333333] hover:text-[#03C75A]'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div className="hidden lg:flex items-center gap-2 text-[11px] text-[#666666]">
+              <span className="w-2 h-2 rounded-full bg-[#03C75A] animate-pulse" />
+              <span>AI 서버 가동률 <strong className="text-[#03C75A]">99.8%</strong></span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* 2. MAIN CONTAINER (2/3 CONTENT + 1/3 NAVER SIDEBAR) */}
+      <main className="max-w-[1100px] w-full mx-auto px-4 py-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* LEFT MAIN CONTENT AREA (8 COLS) */}
+        <section className="lg:col-span-8 space-y-6">
+
+          {/* TAB 1: YEAR-BY-YEAR AGING VISUALIZER */}
+          {activeGnb === 'timeline' && (
+            <div className="space-y-5">
+              
+              {/* Case Selector Banner */}
+              <div className="bg-white border border-[#E4E8EB] rounded-lg p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between border-b border-[#F1F3F5] pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-[#E8F9EE] text-[#00A843] text-[11px] font-bold px-2 py-0.5 rounded border border-[#BCECC9]">
+                      사례번호 {selectedCase.id}
+                    </span>
+                    <h2 className="text-base font-bold text-[#111111]">
+                      {selectedCase.name} 아동 연도별 얼굴 변형 추적
+                    </h2>
+                  </div>
+                  <span className="text-xs text-[#888888]">조회 {selectedCase.views.toLocaleString()}회</span>
+                </div>
+
+                {/* Case Switcher Buttons */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-xs font-bold text-[#666666]">대상 선택:</span>
+                  {MOCK_CASES.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedCase(c)}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                        selectedCase.id === c.id
+                          ? 'bg-[#03C75A] text-white font-bold shadow-sm'
+                          : 'bg-[#F5F6F8] text-[#444444] hover:bg-[#EAECEF] border border-[#E4E8EB]'
+                      }`}
+                    >
+                      {c.name} ({c.missingYear}년 / 당시 만 {c.missingAge}세)
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* TIMELINE SLIDER CONTROLLER */}
+              <div className="bg-white border border-[#E4E8EB] rounded-lg p-5 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#03C75A]" />
+                    <span className="text-xs font-bold text-[#111111]">연도별 타임라인 조절 (Age Progression)</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xl font-black text-[#03C75A] font-mono">{selectedYear}년</span>
+                    <span className="text-xs text-[#666666] ml-2">
+                      (추정 나이: <strong className="text-[#111111]">만 {getAgeForYear(selectedYear)}세</strong>)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 pb-1">
+                  <input 
+                    type="range"
+                    min={selectedCase.missingYear}
+                    max={2026}
+                    step={1}
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    className="w-full h-2.5 bg-[#EAECEF] rounded-lg appearance-none cursor-pointer accent-[#03C75A]"
+                  />
+                  <div className="flex justify-between text-[11px] text-[#888888] font-mono mt-2">
+                    <span>{selectedCase.missingYear}년 (원본 만 {selectedCase.missingAge}세)</span>
+                    <span>2018년</span>
+                    <span>2022년</span>
+                    <span>2026년 (현재 만 {selectedCase.currentAge}세)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* IMAGE COMPARISON DISPLAY BOX */}
+              <div className="bg-white border border-[#E4E8EB] rounded-lg p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-[#F1F3F5] pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#111111]">AI 얼굴 복원 비교</span>
+                    <span className="text-[11px] text-[#888888]">StyleGAN2 + SAM 연령 보정 알고리즘</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowMesh(!showMesh)}
+                      className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                        showMesh ? 'bg-[#E8F9EE] text-[#00A843] border-[#BCECC9]' : 'bg-white text-[#666666] border-[#E4E8EB]'
+                      }`}
+                    >
+                      3D 안면 특징점 {showMesh ? 'ON' : 'OFF'}
+                    </button>
+                    <div className="flex bg-[#F5F6F8] p-0.5 rounded border border-[#E4E8EB] text-xs">
+                      <button
+                        onClick={() => setViewMode('side')}
+                        className={`px-2.5 py-1 rounded text-[11px] ${
+                          viewMode === 'side' ? 'bg-white font-bold text-[#111111] shadow-sm' : 'text-[#666666]'
+                        }`}
+                      >
+                        나란히
+                      </button>
+                      <button
+                        onClick={() => setViewMode('overlay')}
+                        className={`px-2.5 py-1 rounded text-[11px] ${
+                          viewMode === 'overlay' ? 'bg-white font-bold text-[#111111] shadow-sm' : 'text-[#666666]'
+                        }`}
+                      >
+                        오버레이
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Canvas Display */}
+                {viewMode === 'side' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
+                    {/* Original Photo Card */}
+                    <div className="border border-[#E4E8EB] rounded-lg p-3 text-center bg-[#F8F9FA]">
+                      <div className="text-xs font-bold text-[#444444] mb-2 flex items-center justify-center gap-1">
+                        <span>최초 실종 당시</span>
+                        <span className="text-[#888888]">({selectedCase.missingYear}년 / 만 {selectedCase.missingAge}세)</span>
+                      </div>
+                      <div className="aspect-square bg-slate-900 rounded-md overflow-hidden relative border border-[#E4E8EB]">
+                        <DynamicFaceRepresentation 
+                          age={selectedCase.missingAge} 
+                          colorPalette={selectedCase.colorPalette}
+                          showMesh={showMesh}
+                          isOriginal={true}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Age Progressed Photo Card */}
+                    <div className="border-2 border-[#03C75A]/40 rounded-lg p-3 text-center bg-[#E8F9EE]/20">
+                      <div className="text-xs font-bold text-[#03C75A] mb-2 flex items-center justify-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>AI 예측 현재 모습</span>
+                        <span className="text-[#00A843]">({selectedYear}년 / 만 {getAgeForYear(selectedYear)}세)</span>
+                      </div>
+                      <div className="aspect-square bg-slate-900 rounded-md overflow-hidden relative border border-[#03C75A]/30 shadow-sm">
+                        <DynamicFaceRepresentation 
+                          age={getAgeForYear(selectedYear)} 
+                          colorPalette={selectedCase.colorPalette}
+                          showMesh={showMesh}
+                          isOriginal={false}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Overlay Slider View */
+                  <div className="relative max-w-sm mx-auto aspect-square rounded-lg border border-[#E4E8EB] overflow-hidden bg-slate-900">
+                    <div className="absolute inset-0">
+                      <DynamicFaceRepresentation 
+                        age={getAgeForYear(selectedYear)} 
+                        colorPalette={selectedCase.colorPalette}
+                        showMesh={showMesh}
+                        isOriginal={false}
+                      />
+                    </div>
+                    <div 
+                      className="absolute inset-0 overflow-hidden"
+                      style={{ width: `${overlayPos}%` }}
+                    >
+                      <div className="w-[380px] h-[380px] bg-slate-900">
+                        <DynamicFaceRepresentation 
+                          age={selectedCase.missingAge} 
+                          colorPalette={selectedCase.colorPalette}
+                          showMesh={showMesh}
+                          isOriginal={true}
+                        />
+                      </div>
+                    </div>
+                    <div 
+                      className="absolute top-0 bottom-0 w-0.5 bg-[#03C75A] z-20 cursor-ew-resize"
+                      style={{ left: `${overlayPos}%` }}
+                    >
+                      <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-[#03C75A] text-white flex items-center justify-center text-[10px] shadow-md font-bold">
+                        ↔
+                      </div>
+                    </div>
+                    <input 
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={overlayPos}
+                      onChange={(e) => setOverlayPos(e.target.value)}
+                      className="absolute inset-0 opacity-0 cursor-ew-resize z-30"
+                    />
+                  </div>
+                )}
+
+                {/* Analysis Indicators */}
+                <div className="pt-4 border-t border-[#F1F3F5] grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-[#F8F9FA] p-3 rounded border border-[#E4E8EB]">
+                    <span className="text-[#888888] block text-[11px]">하악골(턱선) 성장 팽창률</span>
+                    <strong className="text-[#03C75A] text-sm font-mono">
+                      +{Math.min(45, (getAgeForYear(selectedYear) - selectedCase.missingAge) * 2.8).toFixed(1)}%
+                    </strong>
+                  </div>
+                  <div className="bg-[#F8F9FA] p-3 rounded border border-[#E4E8EB]">
+                    <span className="text-[#888888] block text-[11px]">미간 및 비강 거리 보정</span>
+                    <strong className="text-[#111111] text-sm font-mono">
+                      +{Math.min(30, (getAgeForYear(selectedYear) - selectedCase.missingAge) * 1.8).toFixed(1)}%
+                    </strong>
+                  </div>
+                  <div className="bg-[#F8F9FA] p-3 rounded border border-[#E4E8EB]">
+                    <span className="text-[#888888] block text-[11px]">유전자 특징 유지 지표</span>
+                    <strong className="text-[#03C75A] text-sm font-mono">98.4% 일치</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* NAVER KNOWLEDGE / BLOG STYLE ARTICLE BOX */}
+              <div className="bg-white border border-[#E4E8EB] rounded-lg p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-[#F1F3F5] pb-3">
+                  <span className="text-xs font-bold text-[#111111] flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-[#03C75A]" />
+                    Gemini AI 전문 수사 지원 보고서
+                  </span>
+                  <button
+                    onClick={handleGeminiReport}
+                    disabled={geminiLoading}
+                    className="px-3 py-1.5 bg-[#03C75A] hover:bg-[#02B350] text-white text-xs font-bold rounded transition-colors flex items-center gap-1.5"
+                  >
+                    {geminiLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'AI 보고서 자동 요약 생성'}
+                  </button>
+                </div>
+
+                {geminiResult ? (
+                  <div className="bg-[#F8F9FA] p-4 rounded-md border border-[#E4E8EB] text-xs text-[#333333] leading-relaxed whitespace-pre-line">
+                    {geminiResult}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#888888]">
+                    버튼을 누르면 Gemini AI가 사례 데이터를 바탕으로 네이버 뉴스/지식iN 포맷의 정돈된 수사 제보 보고서를 자동 작성합니다.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: CASE DIRECTORY (NAVER SHOPPING / SEARCH LIST STYLE) */}
+          {activeGnb === 'cases' && (
+            <div className="space-y-4">
+              <div className="bg-white border border-[#E4E8EB] rounded-lg p-4 shadow-sm flex items-center justify-between">
+                <h3 className="text-sm font-bold text-[#111111]">실종아동 등록 목록 (총 {MOCK_CASES.length}건)</h3>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-[#888888]">정렬:</span>
+                  <span className="font-bold text-[#03C75A] cursor-pointer">최신순</span>
+                  <span>·</span>
+                  <span className="text-[#666666] cursor-pointer">조회순</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {MOCK_CASES.map((item) => (
+                  <div 
+                    key={item.id}
+                    onClick={() => {
+                      setSelectedCase(item);
+                      setActiveGnb('timeline');
+                    }}
+                    className="bg-white border border-[#E4E8EB] hover:border-[#03C75A] rounded-lg p-4 shadow-sm transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-4">
+                      {/* Avatar */}
+                      <div className="w-16 h-16 bg-slate-900 rounded-md overflow-hidden shrink-0 border border-[#E4E8EB]">
+                        <DynamicFaceRepresentation 
+                          age={item.missingAge} 
+                          colorPalette={item.colorPalette}
+                          showMesh={false}
+                          isOriginal={true}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[#111111]">{item.name} ({item.gender})</span>
+                          <span className="text-[10px] bg-[#E8F9EE] text-[#00A843] px-2 py-0.5 rounded font-bold border border-[#BCECC9]">
+                            {item.status}
+                          </span>
+                          <span className="text-[11px] text-[#888888]">등록일 {item.registerDate}</span>
+                        </div>
+                        <p className="text-xs text-[#555555]">
+                          실종시: <strong>{item.missingYear}년 (만 {item.missingAge}세)</strong> ➔ 현재 추정: <strong className="text-[#03C75A]">만 {item.currentAge}세</strong>
+                        </p>
+                        <p className="text-xs text-[#777777] line-clamp-1">장소: {item.missingLocation} | {item.description}</p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 text-right w-full sm:w-auto border-t sm:border-t-0 pt-2 sm:pt-0 border-[#F1F3F5]">
+                      <button className="w-full sm:w-auto px-3 py-1.5 bg-[#F5F6F8] hover:bg-[#E8F9EE] text-[#03C75A] border border-[#E4E8EB] hover:border-[#03C75A] rounded text-xs font-bold transition-colors">
+                        연도별 추적보기 ➔
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: CCTV MATCHING (NAVER MAP STYLE CONTAINER) */}
+          {activeGnb === 'cctv' && (
+            <div className="space-y-4">
+              <div className="bg-white border border-[#E4E8EB] rounded-lg p-5 shadow-sm space-y-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#F1F3F5] pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-[#111111] flex items-center gap-2">
+                      <Scan className="w-4 h-4 text-[#03C75A]" />
+                      네이버 지도 연동 실시간 CCTV Vector 대조 스캔
+                    </h3>
+                    <p className="text-xs text-[#777777] mt-0.5">
+                      AI 연령 보정 벡터 데이터와 전국 공공 Traffic CCTV 인공지능 탐지 피드를 실시간 매칭합니다.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={runCCTVScan}
+                    disabled={isScanning}
+                    className="px-4 py-2 bg-[#03C75A] hover:bg-[#02B350] text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0"
+                  >
+                    {isScanning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    {isScanning ? `CCTV 대조 중 (${scanProgress}%)` : '전국 CCTV 스캔 실행'}
+                  </button>
+                </div>
+
+                {isScanning && (
+                  <div className="bg-[#F8F9FA] p-3 rounded border border-[#E4E8EB] space-y-1.5">
+                    <div className="flex justify-between text-xs text-[#03C75A] font-bold font-mono">
+                      <span>CCTV Frame Vector Distance Comparing...</span>
+                      <span>{scanProgress}%</span>
+                    </div>
+                    <div className="w-full bg-[#EAECEF] h-2 rounded-full overflow-hidden">
+                      <div className="bg-[#03C75A] h-full transition-all duration-200" style={{ width: `${scanProgress}%` }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* MAP & CANDIDATES DISPLAY */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* NAVER MAP SIMULATOR */}
+                <div className="bg-white border border-[#E4E8EB] rounded-lg p-4 shadow-sm flex flex-col justify-between min-h-[320px]">
+                  <div className="flex items-center justify-between text-xs font-bold border-b border-[#F1F3F5] pb-2">
+                    <span className="flex items-center gap-1 text-[#111111]">
+                      <MapPin className="w-4 h-4 text-[#03C75A]" /> NAVER Map 지능형 위치 핀
+                    </span>
+                    <span className="text-[11px] text-[#00A843]">실시간 탐지 3개소</span>
+                  </div>
+
+                  {/* Map Graphic */}
+                  <div className="my-3 h-52 bg-[#E5E9EE] rounded relative overflow-hidden border border-[#D3D8DF] flex items-center justify-center">
+                    <div className="absolute inset-0 opacity-30 bg-[radial-gradient(#03C75A_1px,transparent_1px)] [background-size:12px_12px]" />
+                    
+                    {/* Pin 1 */}
+                    <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                      <span className="bg-[#E53935] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow mb-0.5 animate-bounce">
+                        94.8% Match
+                      </span>
+                      <MapPin className="w-6 h-6 text-[#E53935] fill-[#E53935]" />
+                    </div>
+
+                    {/* Pin 2 */}
+                    <div className="absolute bottom-1/4 left-1/4 flex flex-col items-center opacity-80">
+                      <MapPin className="w-5 h-5 text-[#03C75A] fill-[#03C75A]" />
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-[#777777] bg-[#F8F9FA] p-2 rounded border border-[#E4E8EB]">
+                    포착 위치는 즉시 관제팀에 전달되어 검증 절차가 진행됩니다.
+                  </p>
+                </div>
+
+                {/* ALERTS LIST */}
+                <div className="space-y-3">
+                  {MOCK_MATCH_ALERTS.map((alert) => (
+                    <div key={alert.id} className="bg-white border border-[#E4E8EB] hover:border-[#03C75A] rounded-lg p-3.5 shadow-sm space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-[#111111]">{alert.caseName}</span>
+                        <span className="font-mono text-[#03C75A] font-extrabold text-sm">{alert.similarity}% 유사</span>
+                      </div>
+                      <p className="text-xs text-[#444444] font-medium">{alert.location}</p>
+                      <div className="flex items-center justify-between text-[11px] text-[#888888] pt-1 border-t border-[#F1F3F5]">
+                        <span>시간: {alert.timestamp}</span>
+                        <span className="text-[#03C75A] font-bold cursor-pointer hover:underline">상세위치 보기 ➔</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: POSTER & PUBLIC TIP GENERATOR */}
+          {activeGnb === 'poster' && (
+            <div className="space-y-6">
+              <div className="bg-white border border-[#E4E8EB] rounded-lg p-6 shadow-sm space-y-6">
+                
+                {/* Poster Header */}
+                <div className="bg-[#03C75A] text-white p-4 rounded-md text-center space-y-1 shadow-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-widest bg-black/10 px-2 py-0.5 rounded">
+                    경찰청 공식 제보 포스터 / MISSING CHILD POSTER
+                  </span>
+                  <h3 className="text-xl font-black">{selectedCase.name} ({selectedCase.gender}) 아동을 찾습니다</h3>
+                </div>
+
+                {/* Photos Grid */}
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className="border border-[#E4E8EB] p-3 rounded-lg bg-[#F8F9FA]">
+                    <div className="text-xs font-bold text-[#555555] mb-2">실종 당시 ({selectedCase.missingYear}년 / 만 {selectedCase.missingAge}세)</div>
+                    <div className="aspect-square bg-slate-900 rounded overflow-hidden">
+                      <DynamicFaceRepresentation 
+                        age={selectedCase.missingAge} 
+                        colorPalette={selectedCase.colorPalette}
+                        showMesh={false}
+                        isOriginal={true}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-2 border-[#03C75A]/50 p-3 rounded-lg bg-[#E8F9EE]/20">
+                    <div className="text-xs font-bold text-[#03C75A] mb-2">AI 추정 현재 모습 (2026년 / 만 {selectedCase.currentAge}세)</div>
+                    <div className="aspect-square bg-slate-900 rounded overflow-hidden">
+                      <DynamicFaceRepresentation 
+                        age={selectedCase.currentAge} 
+                        colorPalette={selectedCase.colorPalette}
+                        showMesh={false}
+                        isOriginal={false}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Information Card */}
+                <div className="bg-[#F8F9FA] p-4 rounded-lg border border-[#E4E8EB] space-y-2 text-xs text-[#333333]">
+                  <div className="flex justify-between border-b border-[#E4E8EB] pb-2">
+                    <span className="font-bold text-[#666666]">실종 장소:</span>
+                    <span className="font-semibold">{selectedCase.missingLocation}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-[#E4E8EB] pb-2">
+                    <span className="font-bold text-[#666666]">신체 특징:</span>
+                    <span className="font-semibold">{selectedCase.description}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-bold text-[#666666]">신고 제보:</span>
+                    <span className="font-bold text-[#03C75A]">{selectedCase.contact}</span>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button 
+                    onClick={() => window.print()}
+                    className="flex-1 py-3 bg-[#03C75A] hover:bg-[#02B350] text-white rounded font-bold text-xs shadow-sm transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" /> 포스터 PDF 인쇄/다운로드
+                  </button>
+                  <button 
+                    onClick={() => alert("네이버 블로그 및 카페 공유 링크가 복사되었습니다.")}
+                    className="flex-1 py-3 bg-white hover:bg-[#F5F6F8] text-[#333333] border border-[#E4E8EB] rounded font-bold text-xs transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Share2 className="w-4 h-4 text-[#03C75A]" /> 네이버 카페/블로그 공유
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: AI PIPELINE TECH GUIDE (NAVER KNOWLEDGE IN STYLE) */}
+          {activeGnb === 'guide' && (
+            <div className="space-y-4">
+              <div className="bg-white border border-[#E4E8EB] rounded-lg p-5 shadow-sm space-y-2">
+                <span className="text-xs font-bold text-[#03C75A] uppercase tracking-wider">AI Architecture</span>
+                <h3 className="text-lg font-extrabold text-[#111111]">희망트레이스 AI 연령 변형 복원 원리</h3>
+                <p className="text-xs text-[#666666] leading-relaxed">
+                  네이버 클라우드 플랫폼 기반 고성능 인공지능 파이프라인으로 구현된 세 가지 핵심 기술입니다.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {[
+                  { q: '1. StyleGAN2 안면 Latent Alignment 기술이란?', a: '단 한 장의 어린 시절 사진에서 128개의 고유 안면 좌표를 정밀 추출하고, 고차원 잠재 공간에 정렬하여 변형의 기준점으로 삼습니다.' },
+                  { q: '2. SAM Age Progression 골격 추적 기술이란?', a: '동아시아 아동 연령별 표준 골격 성장에 따른 턱선 팽창률과 눈가 미간 비율 변형 지표를 물리 시뮬레이션 기반으로 합성합니다.' },
+                  { q: '3. 유전자 고유성 보존 필터(Identity Preservation)란?', a: '시간이 지나도 변하지 않는 점, 흉터, 귀 형태 등의 고유 지표 가중치를 유지하여 오탐률을 0.01% 이하로 낮춥니다.' }
+                ].map((item, idx) => (
+                  <div key={idx} className="bg-white border border-[#E4E8EB] rounded-lg p-4 shadow-sm space-y-2">
+                    <h4 className="text-xs font-bold text-[#03C75A] flex items-center gap-1.5">
+                      <HelpCircle className="w-4 h-4 shrink-0" />
+                      {item.q}
+                    </h4>
+                    <p className="text-xs text-[#444444] leading-relaxed pl-5">{item.a}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </section>
+
+        {/* RIGHT SIDEBAR WIDGET AREA (4 COLS - NAVER STYLE WIDGETS) */}
+        {/* WIDGET 1: PROFILE / LOGIN BOX STYLE */}
+        <aside className="lg:col-span-4 space-y-4">
+
+          <div className="bg-white border border-[#E4E8EB] rounded-lg p-4 shadow-sm space-y-3">
+            <div className="flex items-center gap-3 border-b border-[#F1F3F5] pb-3">
+              <div className="w-10 h-10 rounded-full bg-[#E8F9EE] border border-[#BCECC9] flex items-center justify-center text-[#03C75A] font-extrabold text-lg">
+                W
+              </div>
+              <div>
+                <div className="text-xs font-bold text-[#111111]">경찰청 실종아동 관제센터</div>
+                <div className="text-[11px] text-[#00A843]">공공 인증 보안 가동 중</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-center text-xs pt-1">
+              <div className="bg-[#F8F9FA] p-2 rounded border border-[#E4E8EB]">
+                <span className="text-[#888888] block text-[10px]">오늘 발견 건수</span>
+                <strong className="text-[#03C75A]">12건</strong>
+              </div>
+              <div className="bg-[#F8F9FA] p-2 rounded border border-[#E4E8EB]">
+                <span className="text-[#888888] block text-[10px]">AI 추적중 사례</span>
+                <strong className="text-[#111111]">3,410건</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* WIDGET 2: EMERGENCY HOTLINE BOX */}
+          <div className="bg-[#E8F9EE] border border-[#BCECC9] rounded-lg p-4 shadow-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#00A843] flex items-center gap-1">
+                <Phone className="w-3.5 h-3.5" /> 긴급 제보 센터
+              </span>
+              <span className="text-[10px] bg-[#03C75A] text-white px-1.5 py-0.5 rounded font-bold">24시간</span>
+            </div>
+            <div className="text-lg font-black text-[#111111]">국번없이 182</div>
+            <p className="text-[11px] text-[#555555]">
+              작은 제보 하나가 한 가족에게 평생의 희망이 됩니다.
+            </p>
+          </div>
+
+          {/* WIDGET 3: LIVE REPORT TICKER (NAVER REALTIME STYLE) */}
+          <div className="bg-white border border-[#E4E8EB] rounded-lg p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between border-b border-[#F1F3F5] pb-2">
+              <span className="text-xs font-bold text-[#111111] flex items-center gap-1">
+                <Bell className="w-3.5 h-3.5 text-[#03C75A]" /> 실시간 제보 현황
+              </span>
+              <span className="text-[10px] text-[#888888]">LIVE</span>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              {[
+                { time: '14:22', text: '서울 관악구 신림동 목격 제보 접수' },
+                { time: '13:50', text: '부산 센텀시티 CCTV AI 94% 포착' },
+                { time: '12:10', text: '인천 연수구 관련 주민제보 전달 완료' }
+              ].map((item, idx) => (
+                <div key={idx} className="flex items-start gap-2 text-[#444444]">
+                  <span className="font-mono text-[#888888] text-[10px] mt-0.5">{item.time}</span>
+                  <span className="line-clamp-1 flex-1 text-[11px]">{item.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* WIDGET 4: DAILY HOPE WIDGET */}
+          <div className="bg-white border border-[#E4E8EB] rounded-lg p-4 shadow-sm space-y-2 text-xs">
+            <div className="font-bold text-[#111111]">오늘의 희망 메시지</div>
+            <p className="text-[#666666] leading-relaxed text-[11px]">
+              "AI 기술과 사회적 관심의 결합으로 지난 1년간 140여 명의 실종 아동이 가족의 품으로 돌아왔습니다."
+            </p>
+          </div>
+
+        </aside>
+      </main>
+
+      {/* REGISTRATION MODAL */}
+      {isRegisterModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-[#E4E8EB] rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#F1F3F5] pb-3">
+              <h3 className="text-sm font-bold text-[#111111] flex items-center gap-2">
+                <Camera className="w-4 h-4 text-[#03C75A]" />
+                실종아동 AI 연령 추적 신규 등록
+              </h3>
+              <button onClick={() => setIsRegisterModal(false)} className="text-[#888888] hover:text-[#111111] text-xs font-bold">
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleRunAnalysis} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[#444444] font-medium mb-1">성명</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="예: 홍길동"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full border border-[#E4E8EB] rounded px-3 py-2 text-xs focus:outline-none focus:border-[#03C75A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[#444444] font-medium mb-1">실종 당시 나이</label>
+                  <input 
+                    type="number" 
+                    required
+                    value={formData.missingAge}
+                    onChange={(e) => setFormData({...formData, missingAge: e.target.value})}
+                    className="w-full border border-[#E4E8EB] rounded px-3 py-2 text-xs focus:outline-none focus:border-[#03C75A]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#444444] font-medium mb-1">실종 연도</label>
+                  <input 
+                    type="number" 
+                    required
+                    value={formData.missingYear}
+                    onChange={(e) => setFormData({...formData, missingYear: e.target.value})}
+                    className="w-full border border-[#E4E8EB] rounded px-3 py-2 text-xs focus:outline-none focus:border-[#03C75A]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[#444444] font-medium mb-1">실종 장소</label>
+                <input 
+                  type="text" 
+                  placeholder="예: 서울 관악구"
+                  value={formData.location}
+                  onChange={(e) => setFormData({...formData, location: e.target.value})}
+                  className="w-full border border-[#E4E8EB] rounded px-3 py-2 text-xs focus:outline-none focus:border-[#03C75A]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#444444] font-medium mb-1">신체적 특징 (점, 흉터 등)</label>
+                <textarea 
+                  rows={2}
+                  placeholder="특이사항을 적어주세요"
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  className="w-full border border-[#E4E8EB] rounded px-3 py-2 text-xs focus:outline-none focus:border-[#03C75A]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isAnalyzing}
+                className="w-full py-3 bg-[#03C75A] hover:bg-[#02B350] text-white font-bold rounded text-xs transition-colors shadow-sm flex items-center justify-center gap-2"
+              >
+                {isAnalyzing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {isAnalyzing ? 'AI 모델 분석 실행 중...' : 'AI 파이프라인 가동 및 등록하기'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FOOTER */}
+      <footer className="border-t border-[#E4E8EB] bg-white py-6 mt-8 text-xs text-[#666666]">
+        <div className="max-w-[1100px] mx-auto px-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F3F5] pb-3">
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="font-bold text-[#111111]">W 희망트레이스 AI 센터</span>
+              <span>|</span>
+              <span className="hover:underline cursor-pointer">이용약관</span>
+              <span>|</span>
+              <strong className="hover:underline cursor-pointer text-[#111111]">개인정보처리방침</strong>
+              <span>|</span>
+              <span className="hover:underline cursor-pointer">경찰청 182 센터 연동</span>
+            </div>
+            <span className="text-[11px] text-[#888888]">© W Corp. & HopeTrace AI. All rights reserved.</span>
+          </div>
+          <p className="text-[11px] text-[#888888] leading-relaxed">
+            본 서비스는 경찰청 실종아동찾기 데이터베이스 및 인공지능 연령 보정 복원 모델(StyleGAN2/SAM)을 활용하여 제공됩니다.
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// Dynamic SVG Facial Representation Component
+function DynamicFaceRepresentation({ age, colorPalette, showMesh, isOriginal }) {
+  const faceWidth = isOriginal ? 110 : Math.min(135, 110 + (age - 4) * 1.5);
+  const jawLength = isOriginal ? 130 : Math.min(160, 130 + (age - 4) * 2.2);
+  const skinTone = colorPalette?.skin || '#f5d6c6';
+  
+  return (
+    <svg viewBox="0 0 200 220" className="w-full h-full p-2 select-none">
+      <defs>
+        <radialGradient id={`skinGlow-${age}`} cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor={skinTone} />
+          <stop offset="100%" stopColor="#e8bfae" />
+        </radialGradient>
+      </defs>
+
+      <circle cx="100" cy="110" r="90" fill="#020617" />
+
+      <path 
+        d={`M ${100 - faceWidth/2} 80 
+           C ${100 - faceWidth/2} 30, ${100 + faceWidth/2} 30, ${100 + faceWidth/2} 80 
+           C ${100 + faceWidth/2} 130, ${100 + faceWidth/3} ${jawLength}, 100 ${jawLength + 10} 
+           C ${100 - faceWidth/3} ${jawLength}, ${100 - faceWidth/2} 130, ${100 - faceWidth/2} 80 Z`}
+        fill={`url(#skinGlow-${age})`}
+        stroke="#334155"
+        strokeWidth="1.5"
+      />
+
+      <path 
+        d={`M ${100 - faceWidth/2 - 4} 75 C 90 20, 110 20, ${100 + faceWidth/2 + 4} 75 C ${100 + faceWidth/2} 45, ${100 - faceWidth/2} 45, ${100 - faceWidth/2 - 4} 75 Z`}
+        fill={colorPalette?.hair || '#2a221b'}
+      />
+
+      <circle cx={100 - faceWidth/4.2} cy="85" r={isOriginal ? "6" : "5.5"} fill="#1e293b" />
+      <circle cx={100 + faceWidth/4.2} cy="85" r={isOriginal ? "6" : "5.5"} fill="#1e293b" />
+      <circle cx={100 - faceWidth/4.2 + 1} cy="83" r="2" fill="#ffffff" />
+      <circle cx={100 + faceWidth/4.2 + 1} cy="83" r="2" fill="#ffffff" />
+
+      <path 
+        d={`M ${100 - faceWidth/3.2} 74 Q ${100 - faceWidth/4.2} 70 ${100 - faceWidth/7} 75`} 
+        stroke="#1e293b" strokeWidth="2.5" fill="none" strokeLinecap="round"
+      />
+      <path 
+        d={`M ${100 + faceWidth/7} 75 Q ${100 + faceWidth/4.2} 70 ${100 + faceWidth/3.2} 74`} 
+        stroke="#1e293b" strokeWidth="2.5" fill="none" strokeLinecap="round"
+      />
+
+      <path 
+        d={`M 100 85 L 100 ${105 + (age > 10 ? 4 : 0)} Q 100 ${110 + (age > 10 ? 4 : 0)} ${104} ${108 + (age > 10 ? 4 : 0)}`} 
+        stroke="#cbd5e1" strokeWidth="1.8" fill="none" strokeLinecap="round"
+      />
+
+      <path 
+        d={`M ${100 - (isOriginal ? 12 : 16)} ${130 + (age > 10 ? 8 : 0)} Q 100 ${136 + (age > 10 ? 8 : 0)} ${100 + (isOriginal ? 12 : 16)} ${130 + (age > 10 ? 8 : 0)}`} 
+        stroke="#e11d48" strokeWidth="2" fill="none" strokeLinecap="round"
+      />
+
+      {showMesh && (
+        <g stroke="#03C75A" strokeWidth="0.8" strokeOpacity="0.8" fill="none">
+          <circle cx="100" cy="50" r="2" fill="#03C75A" />
+          <circle cx={100 - faceWidth/4.2} cy="85" r="2" fill="#03C75A" />
+          <circle cx={100 + faceWidth/4.2} cy="85" r="2" fill="#03C75A" />
+          <circle cx="100" cy="108" r="2" fill="#03C75A" />
+          <circle cx="100" cy="132" r="2" fill="#03C75A" />
+          <circle cx="100" cy={jawLength + 10} r="2" fill="#03C75A" />
+
+          <line x1="100" y1="50" x2={100 - faceWidth/4.2} y2="85" />
+          <line x1="100" y1="50" x2={100 + faceWidth/4.2} y2="85" />
+          <line x1={100 - faceWidth/4.2} y1="85" x2="100" y2="108" />
+          <line x1={100 + faceWidth/4.2} y1="85" x2="100" y2="108" />
+          <line x1="100" y1="108" x2="100" y2="132" />
+          <line x1="100" y1="132" x2="100" y2={jawLength + 10} />
+        </g>
+      )}
+    </svg>
+  );
+}
